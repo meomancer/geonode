@@ -96,6 +96,14 @@ def download_zip(request, layername):
     return resp
 
 
+def download_clip(request, layername, bbox_string):
+    """Ship and clip."""
+    layer = get_object_or_404(Layer, name=layername)
+    qgis_layer = get_object_or_404(QGISServerLayer, layer=layer)
+
+    return HttpResponse('')
+
+
 def legend(request, layername, layertitle=False):
     """Get the legend from a layer.
 

@@ -246,6 +246,9 @@
   <div class="col-md-4">
 
     <ul class="list-group">
+      <li class="list-group-item">
+          <button id="download-clip" class="btn btn-primary btn-md btn-block">{% trans "Download Clip" %}</button>
+      </li>
       {% if resource.storeType != "remoteStore" %}
         <li class="list-group-item">
         {% if links or links_download %}
@@ -574,7 +577,18 @@
 
     });
     {% endif %}
-        </script>
+       var layer_map = layer_map || null;
+       $('#download-clip').click(function () {
+           if(layer_map) {
+               var url = "{{ link_clip }}";
+               var urls = url.split('?');
+               var bboxString = layer_map.getBounds().toBBoxString();
+               url = urls[0] + '/' + bboxString + '?' + urls[1];
+               location.href=url;
+           }
+       });
+
+    </script>
     <script type="text/javascript">
       $('#set_thumbnail').click(function(){
         createMapThumbnail();

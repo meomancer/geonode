@@ -29,6 +29,7 @@
     }
 </style>
 <script type="text/javascript">
+    var layer_map = null;
     document.addEventListener("DOMContentLoaded", function (event) {
       L.TileLayer.BetterWMS = L.TileLayer.WMS.extend({
 
@@ -155,6 +156,7 @@
         var overlay_layer = {};
 
         var map = L.map('preview_map',{measureControl: true});
+        layer_map = map;
 
       	//add elements to maps page
         var scale_bar = L.control.scale().addTo(map);
