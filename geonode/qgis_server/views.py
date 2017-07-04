@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import shutil
+import subprocess
 import zipfile
 from imghdr import what as image_format
 
@@ -36,6 +37,7 @@ from django.http.response import (
     HttpResponseServerError)
 from django.shortcuts import get_object_or_404
 from django.template.response import TemplateResponse
+from django.utils.encoding import smart_str
 from django.utils.translation import ugettext as _
 
 from geonode.layers.models import Layer
@@ -103,12 +105,74 @@ def download_zip(request, layername):
     return resp
 
 
+def download_mask(request, layername):
+    """Ship and clip."""
+    layer = get_object_or_404(Layer, name=layername)
+    qgis_layer = get_object_or_404(QGISServerLayer, layer=layer)
+    query = request.GET or request.POST
+    params = {
+        param.upper(): value for param, value in query.iteritems()}
+    mask_file = params.get('MASK_FILE', '')
+
+    # for raster
+    raster_filename = None
+    extention = ''
+    for ext in QGISServerLayer.geotiff_format:
+        target_file = qgis_layer.qgis_layer_path_prefix + '.' + ext
+        if os.path.exists(target_file):
+            raster_filename = target_file
+            extention = ext
+            break
+
+    # remove if exist
+    output = qgis_layer.qgis_layer_path_prefix + '.masked.' + extention
+    if os.path.exists(output):
+        os.remove(output)
+    if not os.path.exists(mask_file):
+        raise Http404('Mask file is not found.')
+
+    masking = ('gdalwarp -dstnodata 0 -q -cutline %(MASK)s -crop_to_cutline' +
+               ' -dstalpha -tr 0.0165975103734 0.0165975103734 -of' +
+               ' GTiff %(PROJECT)s %(OUTPUT)s')
+    masking = masking % {
+        'MASK': mask_file,
+        'PROJECT': raster_filename,
+        'OUTPUT': output,
+    }
+    subprocess.call(masking, shell=True)
+
+    return HttpResponse(output)
+
+
 def download_clip(request, layername, bbox_string):
     """Ship and clip."""
     layer = get_object_or_404(Layer, name=layername)
     qgis_layer = get_object_or_404(QGISServerLayer, layer=layer)
 
-    return HttpResponse('')
+    # for raster
+    raster_filename = None
+    extention = ''
+    for ext in QGISServerLayer.geotiff_format:
+        target_file = qgis_layer.qgis_layer_path_prefix + '.' + ext
+        if os.path.exists(target_file):
+            raster_filename = target_file
+            extention = ext
+            break
+
+    # remove if exist
+    output = qgis_layer.qgis_layer_path_prefix + '.' + bbox_string + '.' + extention
+    if os.path.exists(output):
+        os.remove(output)
+
+    if raster_filename:
+        clipping = '''gdal_translate -projwin %(CLIP)s %(PROJECT)s %(OUTPUT)s''' % {
+            'CLIP': bbox_string.replace(',', ' '),
+            'PROJECT': raster_filename,
+            'OUTPUT': output,
+        }
+        subprocess.call(clipping, shell=True)
+
+    return HttpResponse(output)
 
 
 def legend(request, layername, layertitle=False):
@@ -256,7 +320,7 @@ def layer_ogc_request(request, layername):
     raw = response.content
     if is_text:
         raw = raw.replace(
-           QGIS_SERVER_CONFIG['qgis_server_url'], public_url)
+            QGIS_SERVER_CONFIG['qgis_server_url'], public_url)
 
     return HttpResponse(raw, content_type=response.headers.get('content-type'))
 

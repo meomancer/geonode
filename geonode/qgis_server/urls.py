@@ -21,8 +21,9 @@
 from django.conf.urls import patterns, url
 
 from geonode.qgis_server.views import (
-    download_zip,
     download_clip,
+    download_mask,
+    download_zip,
     tile,
     tile_404,
     legend,
@@ -33,20 +34,24 @@ from geonode.qgis_server.views import (
     geotiff,
     qml_style, set_thumbnail)
 
-
 urlpatterns = patterns(
 
     # Specific for a QGIS Layer
     '',
     url(
-        r'^download-zip/(?P<layername>[\w]*)$',
-        download_zip,
-        name='download-zip'
-    ),
-    url(
         r'^download-clip/(?P<layername>[\w]*)/(?P<bbox_string>[0-9.,-]*)',
         download_clip,
         name='download-clip'
+    ),
+    url(
+        r'^download-mask/(?P<layername>[\w]*)',
+        download_mask,
+        name='download-mask'
+    ),
+    url(
+        r'^download-zip/(?P<layername>[\w]*)$',
+        download_zip,
+        name='download-zip'
     ),
     url(
         r'^tiles/'
