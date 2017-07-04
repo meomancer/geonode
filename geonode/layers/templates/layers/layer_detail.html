@@ -584,13 +584,28 @@
     });
     {% endif %}
        var layer_map = layer_map || null;
+       var editableLayers = editableLayers || null;
        $('#download-clip').click(function () {
+           var url = "{{ link_clip }}";
+           var urls = url.split('?');
+
+           if(editableLayers) {
+               var geojson = editableLayers.toGeoJSON();
+               if(geojson.features[0]) {
+                    var coordinates = JSON.stringify(geojson.features[0]['geometry']['coordinates']);
+                    url = urls[0] + '/' + coordinates + '?' + urls[1];
+                    location.href=url;
+                    return;
+               } else {
+                    alert('No polygon in map, this will clip from map extent instead.')
+               }
+           }
+
            if(layer_map) {
-               var url = "{{ link_clip }}";
-               var urls = url.split('?');
                var bboxString = layer_map.getBounds().toBBoxString();
                url = urls[0] + '/' + bboxString + '?' + urls[1];
                location.href=url;
+               return;
            }
        });
 
