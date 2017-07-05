@@ -591,9 +591,8 @@
 
            if(editableLayers) {
                var geojson = editableLayers.toGeoJSON();
-               if(geojson.features[0]) {
-                    var coordinates = JSON.stringify(geojson.features[0]['geometry']['coordinates']);
-                    url = urls[0] + '/' + coordinates + '?' + urls[1];
+               if(geojson.features.length > 0){
+                    url = urls[0] + '?' + urls[1]+'&GEOJSON='+JSON.stringify(geojson);
                     location.href=url;
                     return;
                } else {
@@ -603,7 +602,7 @@
 
            if(layer_map) {
                var bboxString = layer_map.getBounds().toBBoxString();
-               url = urls[0] + '/' + bboxString + '?' + urls[1];
+               url = urls[0] + '?' + urls[1]+'&BBOX=' + bboxString;
                location.href=url;
                return;
            }

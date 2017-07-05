@@ -19,6 +19,7 @@
 #########################################################################
 
 import StringIO
+import datetime
 import json
 import logging
 import os
@@ -106,50 +107,30 @@ def download_zip(request, layername):
 
     return resp
 
+def download_clip(request, layername):
+    """Ship and clip.
 
-def download_mask(request, layername):
-    """Ship and clip."""
+    :param layername: The layer name in Geonode.
+    :type layername: basestring
+
+    :return: The HTTPResponse with a file.
+    """
+    # PREPARATION
     layer = get_object_or_404(Layer, name=layername)
     qgis_layer = get_object_or_404(QGISServerLayer, layer=layer)
     query = request.GET or request.POST
     params = {
         param.upper(): value for param, value in query.iteritems()}
-    mask_file = params.get('MASK_FILE', '')
+    bbox_string = params.get('BBOX', '')
+    geojson = params.get('GEOJSON', '')
 
-    # for raster
-    raster_filename = None
-    extention = ''
-    for ext in QGISServerLayer.geotiff_format:
-        target_file = qgis_layer.qgis_layer_path_prefix + '.' + ext
-        if os.path.exists(target_file):
-            raster_filename = target_file
-            extention = ext
-            break
-
-    # remove if exist
-    output = qgis_layer.qgis_layer_path_prefix + '.masked.' + extention
-    if os.path.exists(output):
-        os.remove(output)
-    if not os.path.exists(mask_file):
-        raise Http404('Mask file is not found.')
-
-    masking = ('gdalwarp -dstnodata 0 -q -cutline %(MASK)s -crop_to_cutline ' +
-               '-dstalpha -tr 0.0165975103734 0.0165975103734 -of ' +
-               'GTiff %(PROJECT)s %(OUTPUT)s')
-    masking = masking % {
-        'MASK': mask_file,
-        'PROJECT': raster_filename,
-        'OUTPUT': output,
-    }
-    subprocess.call(masking, shell=True)
-
-    return HttpResponse(output)
-
-
-def download_clip(request, layername, bbox_string):
-    """Ship and clip."""
-    layer = get_object_or_404(Layer, name=layername)
-    qgis_layer = get_object_or_404(QGISServerLayer, layer=layer)
+    # create temp folder
+    temporary_folder = os.path.join(
+        tempfile.gettempdir(), 'clipped')
+    try:
+        os.mkdir(temporary_folder)
+    except OSError as e:
+        pass
 
     # get file for raster
     raster_filepath = None
@@ -161,42 +142,63 @@ def download_clip(request, layername, bbox_string):
             extention = ext
             break
 
-    # create temp folder
-    temporary_folder = os.path.join(
-        tempfile.gettempdir(), 'clipped')
-    try:
-        os.mkdir(temporary_folder)
-    except OSError as e:
-        if e.errno == 17:
-            pass
-
-    # remove if exist
+    # get temp filename for output
     filename = os.path.basename(qgis_layer.qgis_layer_path_prefix)
-    output = os.path.join(
-        temporary_folder,
-        filename + '.' + bbox_string + '.' + extention
-    )
+    if bbox_string:
+        output = os.path.join(
+            temporary_folder,
+            filename + '.' + bbox_string + '.' + extention
+        )
+        clipping = (
+            'gdal_translate -projwin ' +
+            '%(CLIP)s %(PROJECT)s %(OUTPUT)s'
+        )
+        request_process = clipping % {
+            'CLIP': bbox_string.replace(',', ' '),
+            'PROJECT': raster_filepath,
+            'OUTPUT': output,
+        }
+    elif geojson:
+        current_date = datetime.datetime.today().strftime('%Y-%m-%d_%H-%M-%S')
+        output = os.path.join(
+            temporary_folder,
+            filename + '.' + current_date + '.' + extention
+        )
+        mask_file = os.path.join(
+            temporary_folder,
+            filename + '.' + current_date + '.geojson'
+        )
+        _file = open(mask_file, 'w+')
+        _file.write(geojson)
+        _file.close()
 
+        masking = ('gdalwarp -dstnodata 0 -q -cutline %(MASK)s -crop_to_cutline ' +
+                   '-dstalpha -tr 0.0165975103734 0.0165975103734 -of ' +
+                   'GTiff %(PROJECT)s %(OUTPUT)s')
+        request_process = masking % {
+            'MASK': mask_file,
+            'PROJECT': raster_filepath,
+            'OUTPUT': output,
+        }
+    else:
+        raise Http404('No bbox or coordinates in parameters.')
+
+    # generate if output is not created
     if not os.path.exists(output):
         if raster_filepath:
-            clipping = (
-                'gdal_translate -projwin ' +
-                '%(CLIP)s %(PROJECT)s %(OUTPUT)s'
-            )
-            clipping = clipping % {
-                'CLIP': bbox_string.replace(',', ' '),
-                'PROJECT': raster_filepath,
-                'OUTPUT': output,
-            }
-            subprocess.call(clipping, shell=True)
+            print request_process
+            subprocess.call(request_process, shell=True)
 
     if os.path.exists(output):
         wrapper = FileWrapper(file(output))
         response = HttpResponse(wrapper, content_type='text/plain')
+        response['Content-Disposition'] = 'attachment; filename=%s' % (
+            os.path.basename(output)
+        )
         response['Content-Length'] = os.path.getsize(output)
         return response
     else:
-        raise Http404('File can not be generated.')
+        raise Http404('Project can not be clipped or masked.')
 
 
 def legend(request, layername, layertitle=False):
