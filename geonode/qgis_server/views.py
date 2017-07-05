@@ -189,15 +189,11 @@ def download_clip(request, layername):
     # generate if output is not created
     if not os.path.exists(output):
         if raster_filepath:
-            print request_process
             subprocess.call(request_process, shell=True)
 
     if os.path.exists(output):
         wrapper = FileWrapper(file(output))
-        response = HttpResponse(wrapper, content_type='text/plain')
-        response['Content-Disposition'] = 'attachment; filename=%s' % (
-            os.path.basename(output)
-        )
+        response = HttpResponse(wrapper, content_type='image/tif')
         response['Content-Length'] = os.path.getsize(output)
         return response
     else:
