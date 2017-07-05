@@ -125,6 +125,7 @@ def download_clip(request, layername):
         param.upper(): value for param, value in query.iteritems()}
     bbox_string = params.get('BBOX', '')
     geojson = params.get('GEOJSON', '')
+    current_date = datetime.datetime.today().strftime('%Y-%m-%d_%H-%M-%S')
 
     # create temp folder
     temporary_folder = os.path.join(
@@ -146,10 +147,12 @@ def download_clip(request, layername):
 
     # get temp filename for output
     filename = os.path.basename(qgis_layer.qgis_layer_path_prefix)
+    clip_filename = filename + '.' + current_date + '.' + extention
+
     if bbox_string:
         output = os.path.join(
             temporary_folder,
-            filename + '.' + bbox_string + '.' + extention
+            clip_filename
         )
         clipping = (
             'gdal_translate -projwin ' +
@@ -161,10 +164,9 @@ def download_clip(request, layername):
             'OUTPUT': output,
         }
     elif geojson:
-        current_date = datetime.datetime.today().strftime('%Y-%m-%d_%H-%M-%S')
         output = os.path.join(
             temporary_folder,
-            filename + '.' + current_date + '.' + extention
+            clip_filename
         )
         mask_file = os.path.join(
             temporary_folder,
@@ -192,10 +194,40 @@ def download_clip(request, layername):
             subprocess.call(request_process, shell=True)
 
     if os.path.exists(output):
-        wrapper = FileWrapper(file(output))
-        response = HttpResponse(wrapper, content_type='image/tif')
-        response['Content-Length'] = os.path.getsize(output)
-        return response
+        # Create zip file
+        s = StringIO.StringIO()
+        zf = zipfile.ZipFile(s, "w")
+
+        zip_subdir = layer.name + '_clipped'
+        zip_filename = "%s.zip" % zip_subdir
+
+        files_to_zipped = []
+        for filename in qgis_layer.files:
+            if not filename.endswith('.qgs') and \
+                    not filename.endswith(ext):
+                files_to_zipped.append(filename)
+
+        for fpath in files_to_zipped:
+            # Calculate path for file in zip
+            fdir, fname = os.path.split(fpath)
+            fnames = fname.split('.')
+            fname = fnames[0] + '.' + current_date + '.' + fnames[1]
+            zip_path = os.path.join(zip_subdir, fname)
+            zf.write(fpath, zip_path)
+
+        # Add clipped raster
+        opath, oname = os.path.split(output)
+        zip_path = os.path.join(zip_subdir, oname)
+        zf.write(output, zip_path)
+
+        # Must close zip for all contents to be written
+        zf.close()
+
+        resp = HttpResponse(
+                s.getvalue(), content_type="application/x-zip-compressed")
+        # ..and correct content-disposition
+        resp['Content-Disposition'] = 'attachment; filename=%s' % zip_filename
+        return resp
     else:
         raise Http404('Project can not be clipped or masked.')
 
