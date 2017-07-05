@@ -107,8 +107,10 @@ def download_zip(request, layername):
 
     return resp
 
+
 def download_clip(request, layername):
     """Ship and clip.
+    Clipping layer by bbox or by geojson.
 
     :param layername: The layer name in Geonode.
     :type layername: basestring
@@ -172,7 +174,8 @@ def download_clip(request, layername):
         _file.write(geojson)
         _file.close()
 
-        masking = ('gdalwarp -dstnodata 0 -q -cutline %(MASK)s -crop_to_cutline ' +
+        masking = ('gdalwarp -dstnodata 0 -q -cutline %(MASK)s ' +
+                   '-crop_to_cutline ' +
                    '-dstalpha -tr 0.0165975103734 0.0165975103734 -of ' +
                    'GTiff %(PROJECT)s %(OUTPUT)s')
         request_process = masking % {
@@ -181,7 +184,7 @@ def download_clip(request, layername):
             'OUTPUT': output,
         }
     else:
-        raise Http404('No bbox or coordinates in parameters.')
+        raise Http404('No bbox or geojson in parameters.')
 
     # generate if output is not created
     if not os.path.exists(output):
