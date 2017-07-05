@@ -24,6 +24,7 @@ import logging
 import os
 import shutil
 import subprocess
+import tempfile
 import zipfile
 from imghdr import what as image_format
 
@@ -31,6 +32,7 @@ import requests
 from django.conf import settings
 from django.core.files import File
 from django.core.urlresolvers import reverse
+from django.core.servers.basehttp import FileWrapper
 from django.http import HttpResponse, Http404
 from django.http.response import (
     HttpResponseBadRequest,
@@ -131,9 +133,9 @@ def download_mask(request, layername):
     if not os.path.exists(mask_file):
         raise Http404('Mask file is not found.')
 
-    masking = ('gdalwarp -dstnodata 0 -q -cutline %(MASK)s -crop_to_cutline' +
-               ' -dstalpha -tr 0.0165975103734 0.0165975103734 -of' +
-               ' GTiff %(PROJECT)s %(OUTPUT)s')
+    masking = ('gdalwarp -dstnodata 0 -q -cutline %(MASK)s -crop_to_cutline ' +
+               '-dstalpha -tr 0.0165975103734 0.0165975103734 -of ' +
+               'GTiff %(PROJECT)s %(OUTPUT)s')
     masking = masking % {
         'MASK': mask_file,
         'PROJECT': raster_filename,
@@ -149,30 +151,52 @@ def download_clip(request, layername, bbox_string):
     layer = get_object_or_404(Layer, name=layername)
     qgis_layer = get_object_or_404(QGISServerLayer, layer=layer)
 
-    # for raster
-    raster_filename = None
+    # get file for raster
+    raster_filepath = None
     extention = ''
     for ext in QGISServerLayer.geotiff_format:
         target_file = qgis_layer.qgis_layer_path_prefix + '.' + ext
         if os.path.exists(target_file):
-            raster_filename = target_file
+            raster_filepath = target_file
             extention = ext
             break
 
+    # create temp folder
+    temporary_folder = os.path.join(
+        tempfile.gettempdir(), 'clipped')
+    try:
+        os.mkdir(temporary_folder)
+    except OSError as e:
+        if e.errno == 17:
+            pass
+
     # remove if exist
-    output = qgis_layer.qgis_layer_path_prefix + '.' + bbox_string + '.' + extention
+    filename = os.path.basename(qgis_layer.qgis_layer_path_prefix)
+    output = os.path.join(
+        temporary_folder,
+        filename + '.' + bbox_string + '.' + extention
+    )
+
+    if not os.path.exists(output):
+        if raster_filepath:
+            clipping = (
+                'gdal_translate -projwin ' +
+                '%(CLIP)s %(PROJECT)s %(OUTPUT)s'
+            )
+            clipping = clipping % {
+                'CLIP': bbox_string.replace(',', ' '),
+                'PROJECT': raster_filepath,
+                'OUTPUT': output,
+            }
+            subprocess.call(clipping, shell=True)
+
     if os.path.exists(output):
-        os.remove(output)
-
-    if raster_filename:
-        clipping = '''gdal_translate -projwin %(CLIP)s %(PROJECT)s %(OUTPUT)s''' % {
-            'CLIP': bbox_string.replace(',', ' '),
-            'PROJECT': raster_filename,
-            'OUTPUT': output,
-        }
-        subprocess.call(clipping, shell=True)
-
-    return HttpResponse(output)
+        wrapper = FileWrapper(file(output))
+        response = HttpResponse(wrapper, content_type='text/plain')
+        response['Content-Length'] = os.path.getsize(output)
+        return response
+    else:
+        raise Http404('File can not be generated.')
 
 
 def legend(request, layername, layertitle=False):
