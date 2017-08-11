@@ -1,8 +1,12 @@
 {% load leaflet_tags %}
 {% load i18n %}
+{% load staticfiles %}
 
 {% leaflet_js %}
 {% leaflet_css %}
+
+<link rel="stylesheet" href="{% static 'lib/css/leaflet.draw.css' %}"/>
+<script src="{% static 'lib/js/leaflet.draw.js' %}"></script>
 
 <style>
     .leaflet-container { /* all maps */
@@ -15,6 +19,8 @@
     }
 </style>
 <script type="text/javascript">
+    var layer_map = null;
+    var editableLayers = new L.FeatureGroup();
     document.addEventListener("DOMContentLoaded", function (event) {
       L.TileLayer.BetterWMS = L.TileLayer.WMS.extend({
 
@@ -141,6 +147,43 @@
         var overlay_layer = {};
 
         var map = L.map('preview_map',{measureControl: true});
+        layer_map = map;
+
+        // add draw control
+        map.addLayer(editableLayers);
+        var drawControlOptions = {
+            position: 'topleft',
+            draw: {
+                polyline: false,
+                circle: false,
+                rectangle: false,
+                marker: false,
+                polygon: {
+                    allowIntersection: false, // Restricts shapes to simple polygons
+                    drawError: {
+                        color: '#e1e100', // Color the shape will turn when intersects
+                        message: '<strong>Oh snap!<strong> you can\'t draw that!' // Message that will show when intersect
+                    },
+                    shapeOptions: {
+                        color: '#bada55'
+                    }
+                }
+            },
+            edit: {
+                featureGroup: editableLayers,
+                remove: true
+            }
+        };
+
+        var drawControl = new L.Control.Draw(drawControlOptions);
+        map.addControl(drawControl);
+
+        map.on(L.Draw.Event.CREATED, function (e) {
+            var type = e.layerType,
+                layer = e.layer;
+
+            editableLayers.addLayer(layer);
+        });
 
       	//add elements to maps page
         var scale_bar = L.control.scale().addTo(map);

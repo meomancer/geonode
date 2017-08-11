@@ -339,6 +339,8 @@ def layer_detail(request, layername, template='layers/layer_detail.html'):
                   item.url and 'wms' in item.url or 'gwc' in item.url]
     links_download = [item for idx, item in enumerate(links) if
                       item.url and 'wms' not in item.url and 'gwc' not in item.url]
+
+    link_clip = None
     for item in links_view:
         if item.url and access_token and 'access_token' not in item.url:
             params = {'access_token': access_token}
@@ -347,6 +349,8 @@ def layer_detail(request, layername, template='layers/layer_detail.html'):
         if item.url and access_token and 'access_token' not in item.url:
             params = {'access_token': access_token}
             item.url = Request('GET', item.url, params=params).prepare().url
+        if item.link_type == u'data':
+            link_clip = item.url.replace('download-zip', 'download-clip')
 
     if request.user.has_perm('view_resourcebase', layer.get_self_resource()):
         context_dict["links"] = links_view
@@ -361,6 +365,8 @@ def layer_detail(request, layername, template='layers/layer_detail.html'):
 
     if settings.SOCIAL_ORIGINS:
         context_dict["social_links"] = build_social_links(request, layer)
+
+    context_dict['link_clip'] = link_clip
 
     return render_to_response(template, RequestContext(request, context_dict))
 

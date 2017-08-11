@@ -19,10 +19,13 @@
 #########################################################################
 
 import StringIO
+import datetime
 import json
 import logging
 import os
 import shutil
+import subprocess
+import tempfile
 import zipfile
 from imghdr import what as image_format
 
@@ -30,12 +33,14 @@ import requests
 from django.conf import settings
 from django.core.files import File
 from django.core.urlresolvers import reverse
+from django.core.servers.basehttp import FileWrapper
 from django.http import HttpResponse, Http404
 from django.http.response import (
     HttpResponseBadRequest,
     HttpResponseServerError)
 from django.shortcuts import get_object_or_404
 from django.template.response import TemplateResponse
+from django.utils.encoding import smart_str
 from django.utils.translation import ugettext as _
 
 from geonode.layers.models import Layer
@@ -101,6 +106,130 @@ def download_zip(request, layername):
     resp['Content-Disposition'] = 'attachment; filename=%s' % zip_filename
 
     return resp
+
+
+def download_clip(request, layername):
+    """Ship and clip.
+    Clipping layer by bbox or by geojson.
+
+    :param layername: The layer name in Geonode.
+    :type layername: basestring
+
+    :return: The HTTPResponse with a file.
+    """
+    # PREPARATION
+    layer = get_object_or_404(Layer, name=layername)
+    qgis_layer = get_object_or_404(QGISServerLayer, layer=layer)
+    query = request.GET or request.POST
+    params = {
+        param.upper(): value for param, value in query.iteritems()}
+    bbox_string = params.get('BBOX', '')
+    geojson = params.get('GEOJSON', '')
+    current_date = datetime.datetime.today().strftime('%Y-%m-%d_%H-%M-%S')
+
+    # create temp folder
+    temporary_folder = os.path.join(
+        tempfile.gettempdir(), 'clipped')
+    try:
+        os.mkdir(temporary_folder)
+    except OSError as e:
+        pass
+
+    # get file for raster
+    raster_filepath = None
+    extention = ''
+    for ext in QGISServerLayer.geotiff_format:
+        target_file = qgis_layer.qgis_layer_path_prefix + '.' + ext
+        if os.path.exists(target_file):
+            raster_filepath = target_file
+            extention = ext
+            break
+
+    # get temp filename for output
+    filename = os.path.basename(qgis_layer.qgis_layer_path_prefix)
+    clip_filename = filename + '.' + current_date + '.' + extention
+
+    if bbox_string:
+        output = os.path.join(
+            temporary_folder,
+            clip_filename
+        )
+        clipping = (
+            'gdal_translate -projwin ' +
+            '%(CLIP)s %(PROJECT)s %(OUTPUT)s'
+        )
+        request_process = clipping % {
+            'CLIP': bbox_string.replace(',', ' '),
+            'PROJECT': raster_filepath,
+            'OUTPUT': output,
+        }
+    elif geojson:
+        output = os.path.join(
+            temporary_folder,
+            clip_filename
+        )
+        mask_file = os.path.join(
+            temporary_folder,
+            filename + '.' + current_date + '.geojson'
+        )
+        _file = open(mask_file, 'w+')
+        _file.write(geojson)
+        _file.close()
+
+        masking = ('gdalwarp -dstnodata 0 -q -cutline %(MASK)s ' +
+                   '-crop_to_cutline ' +
+                   '-dstalpha -of ' +
+                   'GTiff %(PROJECT)s %(OUTPUT)s')
+        request_process = masking % {
+            'MASK': mask_file,
+            'PROJECT': raster_filepath,
+            'OUTPUT': output,
+        }
+    else:
+        raise Http404('No bbox or geojson in parameters.')
+
+    # generate if output is not created
+    if not os.path.exists(output):
+        if raster_filepath:
+            subprocess.call(request_process, shell=True)
+
+    if os.path.exists(output):
+        # Create zip file
+        s = StringIO.StringIO()
+        zf = zipfile.ZipFile(s, "w")
+
+        zip_subdir = layer.name + '_clipped'
+        zip_filename = "%s.zip" % zip_subdir
+
+        files_to_zipped = []
+        for filename in qgis_layer.files:
+            if not filename.endswith('.qgs') and \
+                    not filename.endswith(ext):
+                files_to_zipped.append(filename)
+
+        for fpath in files_to_zipped:
+            # Calculate path for file in zip
+            fdir, fname = os.path.split(fpath)
+            fnames = fname.split('.')
+            fname = fnames[0] + '.' + current_date + '.' + fnames[1]
+            zip_path = os.path.join(zip_subdir, fname)
+            zf.write(fpath, zip_path)
+
+        # Add clipped raster
+        opath, oname = os.path.split(output)
+        zip_path = os.path.join(zip_subdir, oname)
+        zf.write(output, zip_path)
+
+        # Must close zip for all contents to be written
+        zf.close()
+
+        resp = HttpResponse(
+                s.getvalue(), content_type="application/x-zip-compressed")
+        # ..and correct content-disposition
+        resp['Content-Disposition'] = 'attachment; filename=%s' % zip_filename
+        return resp
+    else:
+        raise Http404('Project can not be clipped or masked.')
 
 
 def legend(request, layername, layertitle=False):
@@ -248,7 +377,7 @@ def layer_ogc_request(request, layername):
     raw = response.content
     if is_text:
         raw = raw.replace(
-           QGIS_SERVER_CONFIG['qgis_server_url'], public_url)
+            QGIS_SERVER_CONFIG['qgis_server_url'], public_url)
 
     return HttpResponse(raw, content_type=response.headers.get('content-type'))
 

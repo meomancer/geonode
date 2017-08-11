@@ -246,6 +246,9 @@
   <div class="col-md-4">
 
     <ul class="list-group">
+      <li class="list-group-item">
+          <button id="download-clip" class="btn btn-primary btn-md btn-block">{% trans "Download Clip" %}</button>
+      </li>
       {% if resource.storeType != "remoteStore" %}
         <li class="list-group-item">
         {% if links or links_download %}
@@ -580,7 +583,32 @@
 
     });
     {% endif %}
-        </script>
+       var layer_map = layer_map || null;
+       var editableLayers = editableLayers || null;
+       $('#download-clip').click(function () {
+           var url = "{{ link_clip }}";
+           var urls = url.split('?');
+
+           if(editableLayers) {
+               var geojson = editableLayers.toGeoJSON();
+               if(geojson.features.length > 0){
+                    url = urls[0] + '?' + urls[1]+'&GEOJSON='+JSON.stringify(geojson);
+                    location.href=url;
+                    return;
+               } else {
+                    alert('No polygon in map, this will clip from map extent instead.')
+               }
+           }
+
+           if(layer_map) {
+               var bboxString = layer_map.getBounds().toBBoxString();
+               url = urls[0] + '?' + urls[1]+'&BBOX=' + bboxString;
+               location.href=url;
+               return;
+           }
+       });
+
+    </script>
     <script type="text/javascript">
       $('#set_thumbnail').click(function(){
         createMapThumbnail();
