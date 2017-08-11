@@ -178,7 +178,7 @@ def download_clip(request, layername):
 
         masking = ('gdalwarp -dstnodata 0 -q -cutline %(MASK)s ' +
                    '-crop_to_cutline ' +
-                   '-dstalpha -tr 0.0165975103734 0.0165975103734 -of ' +
+                   '-dstalpha -of ' +
                    'GTiff %(PROJECT)s %(OUTPUT)s')
         request_process = masking % {
             'MASK': mask_file,
