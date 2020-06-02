@@ -147,10 +147,10 @@ body {
 .navbar-nav>.dropdown>.dropdown-menu {
     margin-left: 0 !important;
 }
-#branding {
+#branding, .branding {
 	margin: 0;
 }
-#branding .logo {
+#branding .logo, .branding .logo {
 	height: 50px;
 	line-height: 50px;
 }
@@ -169,4 +169,25 @@ body {
     padding-right: 15px;
 	padding-top: 2px;
 	padding-bottom: 2px;
+}
+.branding .logo {
+    padding: 0 !important;
+	background: none !important;
+}
+
+.branding .logo img {
+	vertical-align: middle;
+}
+
+#branding  {
+	min-width: 80px;
+}
+
+.branding a:hover {
+	background: none !important;
+}
+
+#branding .logo i {
+    color: #24619d;
+    line-height: 47px;
 }
