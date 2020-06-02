@@ -131,3 +131,16 @@ body {
 .navbar-nav .search input:focus {
     width: 200px !important;
 }
+
+.dropdown-open {
+	display: block;
+}
+
+.navbar-nav .dropdown>.dropdown-menu {
+    margin-left: 15px;
+}
+
+.navbar-nav>.dropdown>.dropdown-menu {
+    margin-left: 0 !important;
+}
+

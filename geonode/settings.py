@@ -479,6 +479,8 @@ INSTALLED_APPS = (
     'wagtail.search',
     'wagtail.admin',
     'wagtail.core',
+    'wagtail.contrib.modeladmin',
+    'wagtailmenus',
 
     'modelcluster',
 )
@@ -661,6 +663,10 @@ TEMPLATES = [
 
                 # IGRAC context processor
                 'igrac.context_processors.resource_urls',
+
+                # WAGTAIL
+                'wagtail.contrib.settings.context_processors.settings',
+                'wagtailmenus.context_processors.wagtailmenus',
             ],
             # Either remove APP_DIRS or remove the 'loaders' option.
             # 'loaders': [
@@ -1950,4 +1956,5 @@ SEARCH_RESOURCES_EXTENDED = strtobool(os.getenv('SEARCH_RESOURCES_EXTENDED', 'Tr
 
 # Wagtail Settings
 WAGTAIL_SITE_NAME = 'My Example Site'
+WAGTAILMENUS_SITE_SPECIFIC_TEMPLATE_DIRS = True
 # -- END Settings for Wagtail

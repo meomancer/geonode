@@ -21,6 +21,7 @@
 {% load static from staticfiles %}
 {% load account socialaccount %}
 {% load base_tags %}
+{% load menu_tags %}
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -341,6 +342,7 @@
               </ul>
           </li>
           {% endif %}
+          {% main_menu %}
           {% block extra_tab %}
 
           {% endblock %}
@@ -405,6 +407,7 @@
                 {% if user.is_superuser or user.is_staff %}
                     <li role="separator" class="divider"></li>
                     <li><a href="{% url "admin:index" %}">{% trans "Admin" %}</a></li>
+                    <li><a href="/cms/">{% trans "Wagtail Admin" %}</a></li>
                     {% if 'geonode.geoserver' in INSTALLED_APPS %}
                     <li><a href="{{ OGC_SERVER.default.WEB_UI_LOCATION }}">GeoServer</a></li>
                     {% endif %}
@@ -556,6 +559,16 @@
       // Bootstrap tooltip
       $(function () {
           $('[data-toggle="tooltip"]').tooltip()
+      });
+
+      // Fix navbar for wagtailmenus
+      $('.dropdown').click(function () {
+          $(this).parentsUntil('.nav').addClass('dropdown-open');
+          let dropdownElement = $(this).closest('.dropdown-open');
+      });
+      $('.dropdown-toggle').click(function () {
+          $('li').removeClass('dropdown-open');
+          $('ul').removeClass('dropdown-open');
       })
     </script>
 
