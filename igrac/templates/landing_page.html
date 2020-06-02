@@ -6,41 +6,106 @@
 
 {% block extra_head %}
     <link href="{% static "css/base-igrac.css" %}" rel="stylesheet" />
+    <script>
+        function setCookie(cname,cvalue,exdays) {
+            var d = new Date();
+            d.setTime(d.getTime() + (exdays*24*60*60*1000));
+            var expires = "expires=" + d.toGMTString();
+            document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+        }
+
+        function getCookie(cname) {
+            var name = cname + "=";
+            var decodedCookie = decodeURIComponent(document.cookie);
+            var ca = decodedCookie.split(';');
+            for(var i = 0; i < ca.length; i++) {
+                var c = ca[i];
+                while (c.charAt(0) == ' ') {
+                    c = c.substring(1);
+                }
+                if (c.indexOf(name) == 0) {
+                    return c.substring(name.length, c.length);
+                }
+            }
+            return "";
+        }
+
+        function checkCookieBanner() {
+            var hide_banner=getCookie("hideBanner");
+            if(hide_banner){
+                var css = '.banner {display: none;}',
+                    head = document.head || document.getElementsByTagName('head')[0],
+                    style = document.createElement('style');
+
+                head.appendChild(style);
+
+                style.type = 'text/css';
+                if (style.styleSheet){
+                  // This is required for IE8 and below.
+                  style.styleSheet.cssText = css;
+                } else {
+                  style.appendChild(document.createTextNode(css));
+                }
+            }
+        }
+        checkCookieBanner();
+    </script>
+{% endblock %}
+
+{% block banner %}
+    <section class="banner">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <p class="banner-text">IGRAC facilitates and promotes <strong>access to groundwater knowledge</strong> to improve the assessment, development and management of groundwater resources across the world, with particular emphasis on developing countries.</p>
+                    <div class="cta"> <a class="btn btn-blue" href="https://www.un-igrac.org/" target="_blank">Go to main IGRAC website</a> <a class="btn btn-white btn-hide">Hide this block</a> </div>
+                </div>
+                </div>
+            </div>
+        <div class="background"></div>
+    </section>
 {% endblock %}
 
 {% block body %}
-    <div class="container">
-        <h1>{% trans "Explore Maps" %}</h1>
-        <br/>
-        <p><b>The Global Groundwater Information System (GGIS) is an interactive, web-based portal to groundwater-related information and knowledge.</b></p>
+    <div id="content">
+        <h1>{% trans "Explore Maps" %}</h1><br>
+        <p><b>The Global Groundwater Information System (GGIS) is an
+            interactive, web-based portal to groundwater-related information and knowledge.</b></p>
         <p>The GGIS consists of several modules structured around various themes.
             Each module has its own map-based viewer with underlying database to allow
             storing and visualizing geospatial data in a systematic way.
             The following <a href="https://www.un-igrac.org/disclaimer" target="_blank">disclaimer and license</a> are applicable to the GGIS,
-            as well as to all other IGRAC products.  </p>
+            as well as to all other IGRAC products. </p>
     </div>
-    <div class="map-wrapper container">
-        <div class="row">
-            {% for map in maps %}
-                <div class="col-lg-4 map-item">
-                    <a class="map-item-wrappper col-lg-12" href="{% url 'map_view_slug' slug=map.slug %}" data-toggle="tooltip" data-placement="top" title="{{ map.map.title }}">
-                        <div class="col-lg-6">
-                            <img src="{{ map.map.thumbnail_url }}" />
-                        </div>
-                        <div class="col-lg-6">
-                            <div class="row">
-                                <span>
-                                    <strong>{{ map.map.title|truncatechars:12 }}</strong>
-                                </span>
+{% endblock %}
+
+{% block extra_mainbody %}
+    <div class="container">
+        <div class="map-wrapper">
+            <div class="row">
+                {% for map in maps %}
+                    <div class="col-lg-4 map-item">
+                        <a class="map-item-wrappper" href="{% url 'map_view_slug' slug=map.slug %}" data-toggle="tooltip" data-placement="top" title="{{ map.map.title }}">
+                            <div class="viewer-thumb">
+                                <img src="{{ map.map.thumbnail_url }}" />
                             </div>
-                            <br>
-                            <div class="row map-abstract">
-                                <span>{{ map.map.abstract|truncatechars:110 }}</span>
+                            <div class="viewer-desc">
+                                <div class="viewer-title"><strong>{{ map.map.title|truncatechars:18 }}</strong></div>
+                                <div class="map-abstract">{{ map.map.abstract|truncatechars:110 }}</div>
                             </div>
-                        </div>
-                    </a>
-                </div>
-            {% endfor %}
+                        </a>
+                    </div>
+                {% endfor %}
+            </div>
         </div>
     </div>
 {% endblock %}
+
+{% block extra_script %}
+    <script>
+        $('.btn-hide').click(function () {
+            $('.banner').slideUp();
+            setCookie('hideBanner', true, 1)
+        })
+    </script>
+{% endblock extra_script %}

@@ -29,6 +29,7 @@ footer, header, hgroup, menu, nav, section {
 }
 body {
 	line-height: 1;
+	background: white;
 }
 ol, ul {
 	list-style: none;
@@ -124,8 +125,11 @@ body {
 }
 
 .navbar-nav > li > a {
-    padding-top: 24px !important;
-    padding-bottom: 24px !important;
+	padding-top: 14px !important;
+	padding-bottom: 14px !important;
+}
+.navbar-nav .search {
+	top: 10px;
 }
 
 .navbar-nav .search input:focus {
@@ -143,4 +147,10 @@ body {
 .navbar-nav>.dropdown>.dropdown-menu {
     margin-left: 0 !important;
 }
-
+#branding {
+	margin: 0;
+}
+#branding .logo {
+	height: 50px;
+	line-height: 50px;
+}

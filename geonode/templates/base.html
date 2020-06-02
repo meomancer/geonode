@@ -275,7 +275,7 @@
         </button>
         <div id="branding">
             <a class="logo" href="/">
-                <img src="/static/geonode/img/logo-small.svg" width="80" height="32" alt="logo"/>
+                <img src="/static/geonode/img/logo-small.svg" width="100" height="40" alt="logo"/>
             </a>
         </div>
       </div>
@@ -437,6 +437,9 @@
       <h1>{% trans "You are using an outdated browser that is not supported by GeoNode." %}</h1>
       <p>{% trans "Please use a <strong>modern browser</strong> like Mozilla Firefox, Google Chrome or Safari." %}</p>
     </div>
+
+    {% block banner %}
+    {% endblock %}
 
   <div id="wrap">
     {% block middle %}
