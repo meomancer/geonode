@@ -65,15 +65,15 @@
                         as well as to all other IGRAC products. </p>
                 </div>
             </div>
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="cta"> <a class="btn btn-blue" href="https://www.un-igrac.org/" target="_blank">Visit IGRAC Website</a> </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="cta pull-right"><a class="btn btn-white btn-hide">Hide in the future <i class="fa fa-times-circle-o" aria-hidden="true" style="margin-left: 7px"></i></a></div>
-                </div>
+        </div>
+        <div class="cta">
+			<div class="container">
+				<div class="justify">
+			        <a class="btn btn-blue" href="https://www.un-igrac.org/" target="_blank">Go to main IGRAC website</a>
+				    <a class="btn btn-white ml-auto btn-hide">Hide in the future <i class="fa fa-times-circle-o" aria-hidden="true" style="margin-left: 7px"></i></a>
+				</div>
             </div>
-            </div>
+		  </div>
         <div class="background"></div>
     </section>
 {% endblock %}
@@ -85,6 +85,9 @@
 
 {% block extra_mainbody %}
     <div class="container">
+        <div id="content">
+            <h1>{% trans "Explore the viewers" %}</h1>
+        </div>
         <div class="map-wrapper">
             <div class="row">
                 {% for map in maps %}
@@ -94,7 +97,7 @@
                                 <img src="{{ map.map.thumbnail_url }}" />
                             </div>
                             <div class="viewer-desc">
-                                <div class="viewer-title"><strong>{{ map.map.title|truncatechars:18 }}</strong></div>
+                                <div class="viewer-title"><strong>{{ map.map.title|truncatechars:40 }}</strong></div>
                                 <div class="map-abstract">{{ map.map.abstract|truncatechars:110 }}</div>
                             </div>
                         </a>

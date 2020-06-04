@@ -170,6 +170,14 @@ body {
 	padding-top: 2px;
 	padding-bottom: 2px;
 }
+.footer-wrapper {
+	background: rgba(46,135,223,0.85);
+	height: 20px;
+	position: fixed;
+	bottom: 0;
+	color: white;
+}
+
 .branding .logo {
     padding: 0 !important;
 	background: none !important;
