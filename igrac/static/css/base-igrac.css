@@ -159,3 +159,8 @@ body.igrac-home {
 .map-item-wrappper img {
 	max-width: 100%;
 }
+
+.map-item:hover {
+    transform: translate(5px, -5px);
+    transition-duration: 0.2s;
+}

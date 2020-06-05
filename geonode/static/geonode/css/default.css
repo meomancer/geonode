@@ -166,16 +166,16 @@ body {
     display: table-cell;
     vertical-align: middle;
 	font-size: 10pt;
-    padding-right: 15px;
+    padding-right: 5px;
 	padding-top: 2px;
 	padding-bottom: 2px;
 }
 .footer-wrapper {
-	background: rgba(46,135,223,0.85);
+	background: rgba(255, 255, 255, 0.85);
 	height: 20px;
 	position: fixed;
 	bottom: 0;
-	color: white;
+	color: #2c689c;
 }
 
 .branding .logo {
