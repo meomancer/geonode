@@ -170,10 +170,10 @@ body.igrac-home {
 }
 .tooltip-inner {
 	color: #fff;
-	background-color: #797979;
+	background-color: #003d72;
 }
 .tooltip.top .tooltip-arrow {
-	border-top-color: #797979;
+	border-top-color: #003d72;
 }
 .map-item-wrappper .map-abstract {
 	font-size: smaller;
