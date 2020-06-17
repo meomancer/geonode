@@ -191,7 +191,7 @@ body {
 	min-width: 65px;
 }
 
-.branding a:hover {
+.nav.navbar-nav.navbar-right li a.logo:hover {
 	background: none !important;
 }
 
@@ -202,4 +202,21 @@ body {
 
 #ms-container {
     top: 52px !important;
+}
+
+.navbar-nav .search input {
+	border-color: lightgrey !important;
+}
+
+.branding {
+	padding-right: 10px;
+	border-right: 1px solid lightgrey;
+}
+
+.search {
+	margin-left: 10px;
+}
+
+.branding a {
+	background: none !important;
 }
