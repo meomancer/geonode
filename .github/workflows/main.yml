@@ -25,6 +25,7 @@ jobs:
       uses: elgohr/Publish-Docker-Github-Action@master	
       with:
         name: kartoza/geonode_django_base:igrac
-        workdir: geonode/scripts/spcgeonode/django
+        workdir: geonode/
+        dockerfile: scripts/spcgeonode/django/Dockerfile
         username: ${{ secrets.DOCKER_USERNAME }}	
         password: ${{ secrets.DOCKER_PASSWORD }}
