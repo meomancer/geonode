@@ -15,10 +15,16 @@ jobs:
     name: Build and Push Docker Image	
     runs-on: ubuntu-16.04	
     steps:
+    - uses: actions/checkout@master	
+      with: 	
+        repository: kartoza/geonode
+        ref: igrac	
+        fetch-depth: 1	
+        path: geonode/	
     - name: Build and Publish the Docker Image	
       uses: elgohr/Publish-Docker-Github-Action@master	
       with:
         name: kartoza/geonode_django_base:igrac
-        workdir: scripts/spcgeonode/django
+        workdir: geonode/scripts/spcgeonode/django
         username: ${{ secrets.DOCKER_USERNAME }}	
         password: ${{ secrets.DOCKER_PASSWORD }}
