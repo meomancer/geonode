@@ -10,7 +10,11 @@ class Borehole(models.Model):
     """
 
     bhole_date_of_drilling = models.DateField(
-        null=True, verbose_name="bholeDateOfDrilling")
+        null=True,
+        verbose_name="bholeDateOfDrilling",
+        help_text="Date of drilling.")
     bhole_nominal_diameter = models.ForeignKey(
         Quantity, null=True, blank=True,
-        on_delete=models.SET_NULL, verbose_name="bholeNominalDiameter")
+        on_delete=models.SET_NULL,
+        verbose_name="bholeNominalDiameter",
+        help_text="Diameter of the borehole.")
