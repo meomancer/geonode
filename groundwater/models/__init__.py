@@ -7,3 +7,12 @@ class Quantity(models.Model):
         null=True, blank=True)
     value = models.FloatField(
         null=True, blank=True)
+
+
+class GWTerm(models.Model):
+    """ Abstract model for Term """
+    name = models.CharField(max_length=256)
+    description = models.TextField()
+
+    class Meta:
+        abstract = True

@@ -1,22 +1,21 @@
 from django.contrib.gis.db import models
+from groundwater.models import GWTerm
 
 
-class SealingTypeTerm(models.Model):
+class SealingTypeTerm(GWTerm):
     """
     Type of sealing. E.g. annular sealing, plugging, etc.
     """
-    name = models.CharField(max_length=256)
-    description = models.TextField()
+    pass
 
 
-class SealingMaterialTerm(models.Model):
+class SealingMaterialTerm(GWTerm):
     """
     Material used in the sealing component of a
     water well. E.g. formation packer, welded ring,
     shale trap, drive shoe, driven casing, etc.
     """
-    name = models.CharField(max_length=256)
-    description = models.TextField()
+    pass
 
 
 class SealingComponent(models.Model):
@@ -26,7 +25,11 @@ class SealingComponent(models.Model):
     """
     sealing_material = models.ForeignKey(
         SealingMaterialTerm, null=True, blank=True,
-        on_delete=models.SET_NULL, verbose_name='sealingMaterial')
+        on_delete=models.SET_NULL, verbose_name='sealingMaterial',
+        help_text="Material used in the sealing component of a "
+                  "water well. E.g. formation packer, welded ring, "
+                  "shale trap, drive shoe, driven casing, etc.")
     sealing_type = models.ForeignKey(
         SealingTypeTerm, null=True, blank=True,
-        on_delete=models.SET_NULL, verbose_name='sealingType')
+        on_delete=models.SET_NULL, verbose_name='sealingType',
+        help_text="Type of sealing. E.g. annular sealing, plugging, etc.")
