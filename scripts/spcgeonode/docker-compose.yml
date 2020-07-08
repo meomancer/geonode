@@ -68,6 +68,22 @@ services:
     entrypoint: ["/spcgeonode/scripts/spcgeonode/django/docker-entrypoint.sh"]
     command: "uwsgi --chdir=/spcgeonode --module=geonode.wsgi --socket=:8000 --http=127.0.0.1:8001 --processes=5 --buffer-size=8192"
 
+  # django application for development
+  dev:
+    <<: *default-common-django
+    build:
+      context: ../../
+      dockerfile: scripts/spcgeonode/django/Dockerfile-dev
+    volumes:
+      - ../../:/spcgeonode/
+      - ./_volume_static:/spcgeonode-static/
+      - ./_volume_media:/spcgeonode-media/
+    ports:
+      # for django test server
+      - "3002:8080"
+      # for ssh
+      - "3003:22"
+
   # Celery worker that executes celery tasks created by Django.
   celery:
     << : *default-common-django
