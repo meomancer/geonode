@@ -31,6 +31,7 @@ RUN echo "Updating apt-get" && \
 # Install python dependencies
 RUN echo "Geonode python dependencies"
 RUN pip install celery==4.4.0
+RUN apt-get update && apt-get install -y gettext
 
 # Install geonode dependencies
 ADD requirements_igrac.txt /requirements_igrac.txt
