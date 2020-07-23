@@ -254,3 +254,11 @@ if settings.MONITORING_ENABLED:
     urlpatterns += [url(r'^monitoring/',
                         include(('geonode.monitoring.urls', 'geonode.monitoring'),
                                 namespace='monitoring'))]
+
+from igrac.views import map_view_with_slug
+
+urlpatterns += [
+    url(r'^(?P<slug>[^/]+)$',
+        view=map_view_with_slug,
+        name='map_view_slug'),
+]
