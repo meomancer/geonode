@@ -908,7 +908,8 @@ def test_integration(options):
             if _backend == 'geonode.geoserver':
                 call_task('start_geoserver', options={'settings': settings, 'force_exec': True})
             call_task('start', options={'settings': settings})
-            call_task('setup_data', options={'settings': settings})
+            if integration_server_tests:
+                call_task('setup_data', options={'settings': settings})
         elif not integration_csw_tests and _backend == 'geonode.geoserver' and 'geonode.geoserver' in INSTALLED_APPS:
             sh("cp geonode/upload/tests/test_settings.py geonode/")
             settings = 'geonode.test_settings'
@@ -1242,7 +1243,10 @@ def _copytree(src, dst, symlinks=False, ignore=None):
         s = os.path.join(src, item)
         d = os.path.join(dst, item)
         if os.path.isdir(s):
-            shutil.copytree(s, d, symlinks, ignore)
+            try:
+                shutil.copytree(s, d, symlinks, ignore)
+            except Exception:
+                pass
         elif os.path.isfile(s):
             shutil.copy2(s, d)
 

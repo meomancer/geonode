@@ -31,11 +31,13 @@ import json
 
 import gisdata
 from datetime import datetime
+from django.conf import settings
 from django.urls import reverse
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.files.storage import default_storage as storage
 
 from guardian.shortcuts import get_perms, get_anonymous_user
 
@@ -447,6 +449,9 @@ class DocumentModerationTestCase(GeoNodeBaseTestSupport):
 
     def setUp(self):
         super(DocumentModerationTestCase, self).setUp()
+        thumbs_dir = os.path.join(settings.MEDIA_ROOT, "thumbs")
+        if not os.path.exists(thumbs_dir):
+            os.mkdir(thumbs_dir)
         self.user = 'admin'
         self.passwd = 'admin'
         create_models(type=b'document')
@@ -493,17 +498,12 @@ class DocumentModerationTestCase(GeoNodeBaseTestSupport):
             from geonode.base.utils import delete_orphaned_thumbs
             delete_orphaned_thumbs()
 
-            from django.conf import settings
             documents_path = os.path.join(settings.MEDIA_ROOT, 'documents')
             fn = os.path.join(documents_path, os.path.basename(input_path))
             self.assertFalse(os.path.isfile(fn))
 
-            thumbs_path = os.path.join(settings.MEDIA_ROOT, 'thumbs')
-            _cnt = 0
-            for filename in os.listdir(thumbs_path):
-                fn = os.path.join(thumbs_path, filename)
-                if uuid in filename:
-                    _cnt += 1
+            _, files = storage.listdir("thumbs")
+            _cnt = sum(1 for fn in files if uuid in fn)
             self.assertTrue(_cnt == 0)
 
         with self.settings(ADMIN_MODERATE_UPLOADS=True):
@@ -574,7 +574,7 @@ class DocumentNotificationsTestCase(NotificationsTestsHelper):
             _d = Document.objects.create(title='test notifications', owner=self.u)
             self.assertTrue(self.check_notification_out('document_created', self.u))
             _d.title = 'test notifications 2'
-            _d.save()
+            _d.save(notify=True)
             self.assertTrue(self.check_notification_out('document_updated', self.u))
 
             from dialogos.models import Comment
@@ -665,3 +665,86 @@ class DocumentResourceLinkTestCase(GeoNodeBaseTestSupport):
                     content_type=ct.id,
                     object_id=resource.id
                 )
+
+
+class DocumentViewTestCase(GeoNodeBaseTestSupport):
+    def setUp(self):
+        self.not_admin = get_user_model().objects.create(username='r-lukaku', is_active=True)
+        self.not_admin.set_password('very-secret')
+        self.not_admin.save()
+        self.test_doc = Document.objects.create(owner=self.not_admin, title='test', is_approved=True)
+
+    def test_that_keyword_multiselect_is_disabled_for_non_admin_users(self):
+        """
+        Test that keyword multiselect widget is disabled when the user is not an admin
+        when FREETEXT_KEYWORDS_READONLY=True
+        """
+        self.client.login(username=self.not_admin.username, password='very-secret')
+        url = reverse('document_metadata', args=(self.test_doc.pk,))
+        with self.settings(FREETEXT_KEYWORDS_READONLY=True):
+            response = self.client.get(url)
+            self.assertFalse(self.not_admin.is_superuser)
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.context['form']['keywords'].field.disabled)
+
+    def test_that_keyword_multiselect_is_not_disabled_for_admin_users(self):
+        """
+        Test that only admin users can create/edit keywords
+        """
+        admin = self.not_admin
+        admin.is_superuser = True
+        admin.save()
+        self.client.login(username=admin.username, password='very-secret')
+        url = reverse('document_metadata', args=(self.test_doc.pk,))
+        response = self.client.get(url)
+        self.assertTrue(admin.is_superuser)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context['form']['keywords'].field.disabled)
+
+    def test_that_non_admin_user_can_create_write_to_map_without_keyword(self):
+        """
+        Test that non admin users can write to maps without creating/editing keywords
+        when FREETEXT_KEYWORDS_READONLY=True
+        """
+        self.client.login(username=self.not_admin.username, password='very-secret')
+        url = reverse('document_metadata', args=(self.test_doc.pk,))
+        with self.settings(FREETEXT_KEYWORDS_READONLY=True):
+            response = self.client.post(url)
+            self.assertFalse(self.not_admin.is_superuser)
+            self.assertEqual(response.status_code, 200)
+
+    def test_that_non_admin_user_cannot_create_edit_keyword(self):
+        """
+        Test that non admin users cannot edit/create keywords when FREETEXT_KEYWORDS_READONLY=True
+        """
+        self.client.login(username=self.not_admin.username, password='very-secret')
+        url = reverse('document_metadata', args=(self.test_doc.pk,))
+        with self.settings(FREETEXT_KEYWORDS_READONLY=True):
+            response = self.client.post(url, data={'resource-keywords': 'wonderful-keyword'})
+            self.assertFalse(self.not_admin.is_superuser)
+            self.assertEqual(response.status_code, 401)
+            self.assertEqual(response.content, b'Unauthorized: Cannot edit/create Free-text Keywords')
+
+    def test_that_keyword_multiselect_is_enabled_for_non_admin_users_when_freetext_keywords_readonly_istrue(self):
+        """
+        Test that keyword multiselect widget is not disabled when the user is not an admin
+        and FREETEXT_KEYWORDS_READONLY=False
+        """
+        self.client.login(username=self.not_admin.username, password='very-secret')
+        url = reverse('document_metadata', args=(self.test_doc.pk,))
+        with self.settings(FREETEXT_KEYWORDS_READONLY=False):
+            response = self.client.get(url)
+            self.assertFalse(self.not_admin.is_superuser)
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(response.context['form']['keywords'].field.disabled)
+
+    def test_that_non_admin_user_can_create_edit_keyword_when_freetext_keywords_readonly_istrue(self):
+        """
+        Test that non admin users can edit/create keywords when FREETEXT_KEYWORDS_READONLY=False
+        """
+        self.client.login(username=self.not_admin.username, password='very-secret')
+        url = reverse('document_metadata', args=(self.test_doc.pk,))
+        with self.settings(FREETEXT_KEYWORDS_READONLY=False):
+            response = self.client.post(url, data={'resource-keywords': 'wonderful-keyword'})
+            self.assertFalse(self.not_admin.is_superuser)
+            self.assertEqual(response.status_code, 200)

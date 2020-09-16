@@ -48,10 +48,10 @@ var MessageRecipientsTags = /*#__PURE__*/function () {
 
     this.input = input;
     this.tagify = null;
-    this.controller = null;
     this.data_extract_func = data_extract_func;
     this.url = url;
     this.blacklist = blacklist;
+    this.request_controller = null;
   }
 
   _createClass(MessageRecipientsTags, [{
@@ -62,6 +62,7 @@ var MessageRecipientsTags = /*#__PURE__*/function () {
         blacklist: this.blacklist
       });
       this.tagify.on('input', this._onInputHandler.bind(this));
+      this.request_controller = new AbortController();
     }
   }, {
     key: "_onInputHandler",
@@ -71,7 +72,11 @@ var MessageRecipientsTags = /*#__PURE__*/function () {
       var value = event.detail.value;
       this.tagify.settings.whitelist.length = 0;
       this.tagify.loading(true).dropdown.hide.call(this.tagify);
-      fetch(this.url + value).then(function (response) {
+      this.request_controller.abort();
+      this.request_controller = new AbortController();
+      fetch(this.url + value, {
+        signal: this.request_controller.signal
+      }).then(function (response) {
         return response.json().then(_this.data_extract_func).then(function (res) {
           var _this$tagify$settings;
 

@@ -21,6 +21,7 @@
 import io
 import os
 import re
+import six
 import gzip
 import json
 import shutil
@@ -192,12 +193,35 @@ def proxy(request, url=None, response_callback=None,
     status = response.status_code
     content_type = response.headers.get('Content-Type')
 
+    if status >= 400:
+        return HttpResponse(
+            content=content,
+            reason=content,
+            status=status,
+            content_type=content_type)
+
     # decompress GZipped responses if not enabled
     # if content and response and response.getheader('Content-Encoding') == 'gzip':
     if content and content_type and content_type == 'gzip':
         buf = io.BytesIO(content)
         f = gzip.GzipFile(fileobj=buf)
         content = f.read()
+
+    PLAIN_CONTENT_TYPES = [
+        'text',
+        'plain',
+        'html',
+        'json',
+        'xml',
+        'gml'
+    ]
+    for _ct in PLAIN_CONTENT_TYPES:
+        if content_type and _ct in content_type and not isinstance(content, six.string_types):
+            try:
+                content = content.decode()
+                break
+            except Exception:
+                pass
 
     if response and response_callback:
         kwargs = {} if not kwargs else kwargs
@@ -220,7 +244,9 @@ def proxy(request, url=None, response_callback=None,
             return _response
         else:
             def _get_message(text):
-                _s = text.decode("utf-8", "replace")
+                _s = text
+                if isinstance(text, bytes):
+                    _s = text.decode("utf-8", "replace")
                 try:
                     found = re.search('<b>Message</b>(.+?)</p>', _s).group(1).strip()
                 except Exception:
@@ -262,9 +288,9 @@ def download(request, resourceid, sender=Layer):
                     item for idx, item in enumerate(LayerFile.objects.filter(upload_session=upload_session))]
                 if layer_files:
                     # Copy all Layer related files into a temporary folder
-                    for l in layer_files:
-                        if storage.exists(str(l.file)):
-                            geonode_layer_path = storage.path(str(l.file))
+                    for lyr in layer_files:
+                        if storage.exists(str(lyr.file)):
+                            geonode_layer_path = storage.path(str(lyr.file))
                             base_filename, original_ext = os.path.splitext(geonode_layer_path)
                             shutil.copy2(geonode_layer_path, target_folder)
                         else:
@@ -410,16 +436,44 @@ class OWSListView(View):
         out = {'success': True}
         data = []
         out['data'] = data
-        # per-layer links
-        # for link in Link.objects.filter(link_type__in=LINK_TYPES):  # .distinct('url'):
-        #     data.append({'url': link.url, 'type': link.link_type})
-        data.append({'url': ows._wcs_get_capabilities(), 'type': 'OGC:WCS'})
-        data.append({'url': ows._wfs_get_capabilities(), 'type': 'OGC:WFS'})
-        data.append({'url': ows._wms_get_capabilities(), 'type': 'OGC:WMS'})
+        # WMS
+        _raw_url = ows._wms_get_capabilities()
+        _url = urlsplit(_raw_url)
+        headers, access_token = get_headers(request, _url, _raw_url)
+        if access_token:
+            _j = '&' if _url.query else '?'
+            _raw_url = _j.join([_raw_url, 'access_token={}'.format(access_token)])
+        data.append({'url': _raw_url, 'type': 'OGC:WMS'})
+
+        # WCS
+        _raw_url = ows._wcs_get_capabilities()
+        _url = urlsplit(_raw_url)
+        headers, access_token = get_headers(request, _url, _raw_url)
+        if access_token:
+            _j = '&' if _url.query else '?'
+            _raw_url = _j.join([_raw_url, 'access_token={}'.format(access_token)])
+        data.append({'url': _raw_url, 'type': 'OGC:WCS'})
+
+        # WFS
+        _raw_url = ows._wfs_get_capabilities()
+        _url = urlsplit(_raw_url)
+        headers, access_token = get_headers(request, _url, _raw_url)
+        if access_token:
+            _j = '&' if _url.query else '?'
+            _raw_url = _j.join([_raw_url, 'access_token={}'.format(access_token)])
+        data.append({'url': _raw_url, 'type': 'OGC:WFS'})
 
         # catalogue from configuration
         for catname, catconf in settings.CATALOGUE.items():
-            data.append({'url': catconf['URL'], 'type': 'OGC:CSW'})
+            # CSW
+            _raw_url = catconf['URL']
+            _url = urlsplit(_raw_url)
+            headers, access_token = get_headers(request, _url, _raw_url)
+            if access_token:
+                _j = '&' if _url.query else '?'
+                _raw_url = _j.join([_raw_url, 'access_token={}'.format(access_token)])
+            data.append({'url': _raw_url, 'type': 'OGC:CSW'})
+
         # main site url
         data.append({'url': settings.SITEURL, 'type': 'WWW:LINK'})
         return json_response(out)

@@ -20,7 +20,6 @@
 
 import os
 import re
-import glob
 import math
 import uuid
 import logging
@@ -71,12 +70,15 @@ from geonode.utils import (
 from geonode.groups.models import GroupProfile
 from geonode.security.models import PermissionLevelMixin
 from geonode.security.utils import get_visible_resources
-
+from geonode.notifications_helper import (
+    send_notification,
+    get_notification_recipients)
 from geonode.people.enumerations import ROLE_VALUES
 
 from pyproj import transform, Proj
 
 from urllib.parse import urlparse, urlsplit, urljoin
+from imagekit.cachefiles.backends import Simple
 
 logger = logging.getLogger(__name__)
 
@@ -845,8 +847,83 @@ class ResourceBase(PolymorphicModel, PermissionLevelMixin, ItemBase):
         null=True,
         blank=True)
 
+    __is_approved = None
+    __is_published = None
+
+    objects = ResourceBaseManager()
+
+    class Meta:
+        # custom permissions,
+        # add, change and delete are standard in django-guardian
+        permissions = (
+            # ('view_resourcebase', 'Can view resource'),
+            ('change_resourcebase_permissions', 'Can change resource permissions'),
+            ('download_resourcebase', 'Can download resource'),
+            ('publish_resourcebase', 'Can publish resource'),
+            ('change_resourcebase_metadata', 'Can change resource metadata'),
+        )
+
+    def __init__(self, *args, **kwargs):
+        super(ResourceBase, self).__init__(*args, **kwargs)
+        self.__is_approved = self.is_approved
+        self.__is_published = self.is_published
+
     def __str__(self):
         return "{0}".format(self.title)
+
+    def save(self, notify=False, *args, **kwargs):
+        """
+        Send a notification when a resource is created or updated
+        """
+        if hasattr(self, 'class_name') and (self.pk is None or notify):
+            if self.pk is None:
+                # Resource Created
+                notice_type_label = '%s_created' % self.class_name.lower()
+                recipients = get_notification_recipients(notice_type_label)
+                send_notification(recipients, notice_type_label, {'resource': self})
+
+            else:
+                # Resource Updated
+                _notification_sent = False
+
+                # Approval Notifications Here
+                if settings.ADMIN_MODERATE_UPLOADS:
+                    if self.is_approved and not self.is_published and \
+                    self.__is_approved != self.is_approved:
+                        notice_type_label = '%s_approved' % self.class_name.lower()
+                        recipients = get_notification_recipients(notice_type_label)
+                        send_notification(recipients, notice_type_label, {'resource': self})
+                        _notification_sent = True
+
+                # Publishing Notifications Here
+                if not _notification_sent and settings.RESOURCE_PUBLISHING:
+                    if self.is_approved and self.is_published and \
+                    self.__is_published != self.is_published:
+                        notice_type_label = '%s_published' % self.class_name.lower()
+                        recipients = get_notification_recipients(notice_type_label)
+                        send_notification(recipients, notice_type_label, {'resource': self})
+                        _notification_sent = True
+
+                # Updated Notifications Here
+                if not _notification_sent:
+                    notice_type_label = '%s_updated' % self.class_name.lower()
+                    recipients = get_notification_recipients(notice_type_label)
+                    send_notification(recipients, notice_type_label, {'resource': self})
+
+        super(ResourceBase, self).save(*args, **kwargs)
+        self.__is_approved = self.is_approved
+        self.__is_published = self.is_published
+
+    def delete(self, notify=True, *args, **kwargs):
+        """
+        Send a notification when a layer, map or document is deleted
+        """
+        if hasattr(self, 'class_name') and notify:
+            notice_type_label = '%s_deleted' % self.class_name.lower()
+            recipients = get_notification_recipients(notice_type_label)
+            send_notification(recipients, notice_type_label, {'resource': self})
+
+        super(ResourceBase, self).delete(*args, **kwargs)
 
     def get_upload_session(self):
         raise NotImplementedError()
@@ -1238,11 +1315,12 @@ class ResourceBase(PolymorphicModel, PermissionLevelMixin, ItemBase):
             im = Image.open(content_data)
             im.verify()  # verify that it is, in fact an image
 
-            for _thumb in glob.glob(storage.path('thumbs/%s*' % os.path.splitext(filename)[0])):
-                try:
-                    os.remove(_thumb)
-                except Exception:
-                    pass
+            thumbnail_name, ext = os.path.splitext(filename)
+            _, _thumbs = storage.listdir("thumbs")
+            for _thumb in _thumbs:
+                if _thumb.startswith(thumbnail_name):
+                    storage.delete(os.path.join("thumbs", _thumb))
+                    logger.debug("Deleted existing thumbnail: " + _thumb)
 
             if upload_path and image:
                 actual_name = storage.save(upload_path, ContentFile(image))
@@ -1425,19 +1503,6 @@ class ResourceBase(PolymorphicModel, PermissionLevelMixin, ItemBase):
 
     metadata_author = property(_get_metadata_author, _set_metadata_author)
 
-    objects = ResourceBaseManager()
-
-    class Meta:
-        # custom permissions,
-        # add, change and delete are standard in django-guardian
-        permissions = (
-            # ('view_resourcebase', 'Can view resource'),
-            ('change_resourcebase_permissions', 'Can change resource permissions'),
-            ('download_resourcebase', 'Can download resource'),
-            ('publish_resourcebase', 'Can publish resource'),
-            ('change_resourcebase_metadata', 'Can change resource metadata'),
-        )
-
 
 class LinkManager(models.Manager):
     """Helper class to access links grouped by type
@@ -1604,6 +1669,8 @@ class CuratedThumbnail(models.Model):
     @property
     def thumbnail_url(self):
         try:
+            if not Simple()._exists(self.img_thumbnail):
+                Simple().generate(self.img_thumbnail, force=True)
             upload_path = storage.path(self.img_thumbnail.name)
             actual_name = os.path.basename(storage.url(upload_path))
             _upload_path = os.path.join(os.path.dirname(upload_path), actual_name)

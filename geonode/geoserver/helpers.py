@@ -332,6 +332,7 @@ def fixup_style(cat, resource, style):
                 sld = style.read()
             logger.debug("Creating style [%s]", name)
             style = cat.create_style(name, sld, overwrite=True, raw=True, workspace=settings.DEFAULT_WORKSPACE)
+            cat.reset()
             style = cat.get_style(name, workspace=settings.DEFAULT_WORKSPACE) or cat.get_style(name)
             lyr.default_style = style
             logger.debug("Saving changes to %s", lyr)
@@ -368,6 +369,7 @@ def set_layer_style(saved_layer, title, sld, base_file=None):
         try:
             cat.create_style(
                 saved_layer.name, sld, overwrite=False, raw=True, workspace=saved_layer.workspace)
+            cat.reset()
             style = cat.get_style(saved_layer.name, workspace=saved_layer.workspace) or \
                 cat.get_style(saved_layer.name)
         except Exception as e:
@@ -379,6 +381,7 @@ def set_layer_style(saved_layer, title, sld, base_file=None):
         try:
             cat.create_style(saved_layer.name, sld, overwrite=True, raw=True,
                              workspace=saved_layer.workspace)
+            cat.reset()
             style = cat.get_style(saved_layer.name, workspace=saved_layer.workspace)
         except Exception as e:
             logger.exception(e)
@@ -392,8 +395,12 @@ def set_layer_style(saved_layer, title, sld, base_file=None):
             logger.exception(e)
 
 
-def cascading_delete(cat, layer_name):
+def cascading_delete(layer_name=None, catalog=None):
+    if not layer_name:
+        return
+    cat = catalog or gs_catalog
     resource = None
+    workspace = None
     try:
         if layer_name.find(':') != -1 and len(layer_name.split(':')) == 2:
             workspace, name = layer_name.split(':')
@@ -453,29 +460,18 @@ def cascading_delete(cat, layer_name):
             styles = styles + [lyr.default_style]
         except Exception:
             pass
-        gs_styles = [x for x in cat.get_styles()]
-        if settings.DEFAULT_WORKSPACE:
-            gs_styles = gs_styles + [x for x in cat.get_styles(workspaces=settings.DEFAULT_WORKSPACE)]
-            ws_styles = []
-            for s in styles:
-                if s is not None and s.name not in _default_style_names:
-                    m = re.search(r'\d+$', s.name)
-                    _name = s.name[:-len(m.group())] if m else s.name
-                    _s = "%s_%s" % (settings.DEFAULT_WORKSPACE, _name)
-                    for _gs in gs_styles:
-                        if ((_gs.name and _gs.name.startswith("%s_" % settings.DEFAULT_WORKSPACE)) or
-                            (_s in _gs.name)) and\
-                        _gs not in styles:
-                            ws_styles.append(_gs)
-            styles = styles + ws_styles
+        if workspace:
+            gs_styles = [x for x in cat.get_styles(names=[f"{workspace}_{resource_name}"])]
+            styles = styles + gs_styles
+        if settings.DEFAULT_WORKSPACE and settings.DEFAULT_WORKSPACE != workspace:
+            gs_styles = [x for x in cat.get_styles(names=[f"{settings.DEFAULT_WORKSPACE}_{resource_name}"])]
+            styles = styles + gs_styles
         cat.delete(lyr)
         for s in styles:
             if s is not None and s.name not in _default_style_names:
                 try:
                     logger.debug("Trying to delete Style [%s]" % s.name)
                     cat.delete(s, purge='true')
-                    workspace, name = layer_name.split(':') if ':' in layer_name else \
-                        (settings.DEFAULT_WORKSPACE, layer_name)
                 except Exception as e:
                     # Trying to delete a shared style will fail
                     # We'll catch the exception and log it.
@@ -696,7 +692,7 @@ def gs_slurp(
             # in some cases we need to explicitily save the resource to execute the signals
             # (for sure when running updatelayers)
             if execute_signals:
-                layer.save()
+                layer.save(notify=True)
 
             # Fix metadata links if the ip has changed
             if layer.link_set.metadata().count() > 0:
@@ -1104,6 +1100,7 @@ def set_styles(layer, gs_catalog):
                 sld_body = default_style.sld_body
                 try:
                     gs_catalog.create_style(layer.name, sld_body, raw=True, workspace=layer.workspace)
+                    gs_catalog.reset()
                 except Exception:
                     tb = traceback.format_exc()
                     logger.debug(tb)
@@ -1159,6 +1156,7 @@ def save_style(gs_style, layer):
         sld_body = gs_style.sld_body
         try:
             gs_catalog.create_style(gs_style.name, sld_body, raw=True, workspace=layer.workspace)
+            gs_catalog.reset()
             gs_style = gs_catalog.get_style(gs_style.name, workspace=layer.workspace)
         except Exception:
             tb = traceback.format_exc()
@@ -1387,20 +1385,14 @@ def create_geoserver_db_featurestore(
 def _create_featurestore(name, data, overwrite=False, charset="UTF-8", workspace=None):
 
     cat = gs_catalog
-    try:
-        cat.create_featurestore(name, data, overwrite=overwrite, charset=charset)
-    except Exception as e:
-        logger.exception(e)
+    cat.create_featurestore(name, data, workspace=workspace, overwrite=overwrite, charset=charset)
     store = get_store(cat, name, workspace=workspace)
     return store, cat.get_resource(name=name, store=store, workspace=workspace)
 
 
 def _create_coveragestore(name, data, overwrite=False, charset="UTF-8", workspace=None):
     cat = gs_catalog
-    try:
-        cat.create_coveragestore(name, path=data, overwrite=overwrite, upload_data=True)
-    except Exception as e:
-        logger.exception(e)
+    cat.create_coveragestore(name, path=data, workspace=workspace, overwrite=overwrite, upload_data=True)
     store = get_store(cat, name, workspace=workspace)
     return store, cat.get_resource(name=name, store=store, workspace=workspace)
 
@@ -1978,6 +1970,8 @@ def _render_thumbnail(req_body, width=240, height=200):
             data=spec,
             headers=headers,
             user=_user)
+        if not content:
+            return content
         if not isinstance(content, bytes):
             raise Exception(content)
 

@@ -283,7 +283,7 @@ class GeoNodeMapTest(GeoNodeLiveTestSupport):
             self.assertTrue(math.isclose(bbox_x1, uploaded.bbox_x1))
             self.assertTrue(math.isclose(bbox_y0, uploaded.bbox_y0))
             self.assertTrue(math.isclose(bbox_y1, uploaded.bbox_y1))
-            self.assertEqual(srid, uploaded.srid)
+            self.assertTrue(uploaded.srid in srid)
 
             # bbox format: [xmin,xmax,ymin,ymax]
             expected_bbox = [
@@ -868,7 +868,7 @@ class GeoNodeMapTest(GeoNodeLiveTestSupport):
             styles = layer.styles + [layer.default_style]
 
             # Delete the Layer using cascading_delete()
-            cascading_delete(gs_cat, shp_layer.alternate)
+            cascading_delete(layer_name=shp_layer.alternate, catalog=gs_cat)
 
             # Verify that the styles were deleted
             for style in styles:

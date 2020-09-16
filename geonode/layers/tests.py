@@ -50,7 +50,7 @@ from guardian.shortcuts import assign_perm, remove_perm
 
 from geonode import GeoNodeException, geoserver, qgis_server
 from geonode.decorators import on_ogc_backend
-from geonode.layers.models import Layer, Style
+from geonode.layers.models import Layer, Style, Attribute
 from geonode.layers.utils import layer_type, get_files, get_valid_name, \
     get_valid_layer_name
 from geonode.people.utils import get_valid_user
@@ -63,6 +63,10 @@ from geonode.tests.utils import NotificationsTestsHelper
 from geonode.layers.populate_layers_data import create_layer_data
 from geonode.layers import utils
 from geonode.layers.views import _resolve_layer
+from geonode.maps.models import Map, MapLayer
+from geonode.utils import DisableDjangoSignals
+from geonode.maps.tests_populate_maplayers import maplayers as ml
+from geonode.security.utils import remove_object_permissions
 
 logger = logging.getLogger(__name__)
 
@@ -233,7 +237,8 @@ class LayersTest(GeoNodeBaseTestSupport):
 
     def test_layer_attribute_config(self):
         lyr = Layer.objects.all().first()
-        custom_attributes = (lyr.attribute_config())["getFeatureInfo"]
+        attribute_config = lyr.attribute_config()
+        custom_attributes = attribute_config["getFeatureInfo"]
         self.assertEqual(
             custom_attributes["fields"], [
                 "place_name", "description", 'N\xfamero_De_M\xe9dicos'])
@@ -243,6 +248,23 @@ class LayersTest(GeoNodeBaseTestSupport):
         self.assertEqual(
             custom_attributes["propertyNames"]["place_name"],
             "Place Name")
+
+        attributes = Attribute.objects.filter(layer=lyr)
+        for _att in attributes:
+            self.assertEqual(_att.featureinfo_type, 'type_property')
+
+        lyr.featureinfo_custom_template = "<h1>Test HTML</h1>"
+        lyr.use_featureinfo_custom_template = True
+        lyr.save()
+        attribute_config = lyr.attribute_config()
+        self.assertTrue("ftInfoTemplate" in attribute_config)
+        self.assertEqual(
+            attribute_config["ftInfoTemplate"],
+            "<h1>Test HTML</h1>")
+        lyr.use_featureinfo_custom_template = False
+        lyr.save()
+        attribute_config = lyr.attribute_config()
+        self.assertTrue("ftInfoTemplate" not in attribute_config)
 
     def test_layer_styles(self):
         lyr = Layer.objects.all().first()
@@ -1174,8 +1196,9 @@ class LayerNotificationsTestCase(NotificationsTestsHelper):
                 bbox_y0=-90,
                 bbox_y1=90,
                 srid='EPSG:4326')
+            self.assertTrue(self.check_notification_out('layer_created', self.u))
             _l.name = 'test notifications 2'
-            _l.save()
+            _l.save(notify=True)
             self.assertTrue(self.check_notification_out('layer_updated', self.u))
 
             from dialogos.models import Comment
@@ -1332,3 +1355,118 @@ class LayersUploaderTests(GeoNodeBaseTestSupport):
                 _l.delete()
         finally:
             Layer.objects.all().delete()
+
+
+class TestLayerDetailMapViewRights(GeoNodeBaseTestSupport):
+    def setUp(self):
+        super(TestLayerDetailMapViewRights, self).setUp()
+        create_layer_data()
+        self.user = get_user_model().objects.create(username='dybala', email='dybala@gmail.com')
+        self.user.set_password('very-secret')
+        admin = get_user_model().objects.get(username='admin')
+        self.map = Map.objects.create(owner=admin, title='test', is_approved=True, zoom=0, center_x=0.0, center_y=0.0)
+        self.not_admin = get_user_model().objects.create(username='r-lukaku', is_active=True)
+        self.not_admin.set_password('very-secret')
+        self.not_admin.save()
+
+        self.layer = Layer.objects.all().first()
+        with DisableDjangoSignals():
+            self.map_layer = MapLayer.objects.create(
+                fixed=ml[0]['fixed'],
+                group=ml[0]['group'],
+                name=self.layer.alternate,
+                layer_params=ml[0]['layer_params'],
+                map=self.map,
+                source_params=ml[0]['source_params'],
+                stack_order=ml[0]['stack_order'],
+                opacity=ml[0]['opacity'],
+                transparent=True,
+                visibility=True
+            )
+
+    def test_that_authenticated_user_without_permissions_cannot_view_map_in_layer_detail(self):
+        """
+        Test that an authenticated user without permissions to view a map does not see the map under
+        'Maps using this layer' in layer_detail when map is not viewable by 'anyone'
+        """
+        remove_object_permissions(self.map.get_self_resource())
+        self.client.login(username='dybala', password='very-secret')
+        response = self.client.get(reverse('layer_detail', args=(self.layer.alternate,)))
+        self.assertEqual(response.context['map_layers'], [])
+
+    def test_that_keyword_multiselect_is_disabled_for_non_admin_users(self):
+        """
+        Test that keyword multiselect widget is disabled when the user is not an admin
+        """
+        self.test_layer = Layer.objects.create(owner=self.not_admin, title='test', is_approved=True)
+        url = reverse('layer_metadata', args=(self.test_layer.alternate,))
+
+        self.client.login(username=self.not_admin.username, password='very-secret')
+        with self.settings(FREETEXT_KEYWORDS_READONLY=True):
+            response = self.client.get(url)
+            self.assertTrue(response.context['form']['keywords'].field.disabled)
+
+    def test_that_keyword_multiselect_is_not_disabled_for_admin_users(self):
+        """
+        Test that only admin users can create/edit keywords  when FREETEXT_KEYWORDS_READONLY=True
+        """
+        admin = self.not_admin
+        admin.is_superuser = True
+        admin.save()
+        self.test_layer = Layer.objects.create(owner=admin, title='test', is_approved=True)
+        url = reverse('layer_metadata', args=(self.test_layer.alternate,))
+
+        self.client.login(username=admin.username, password='very-secret')
+        with self.settings(FREETEXT_KEYWORDS_READONLY=True):
+            response = self.client.get(url)
+            self.assertFalse(response.context['form']['keywords'].field.disabled)
+
+    def test_that_non_admin_user_cannot_create_edit_keyword(self):
+        """
+        Test that non admin users cannot edit/create keywords when FREETEXT_KEYWORDS_READONLY=True
+        """
+        self.test_layer = Layer.objects.create(owner=self.not_admin, title='test', is_approved=True)
+        url = reverse('layer_metadata', args=(self.test_layer.alternate,))
+
+        self.client.login(username=self.not_admin.username, password='very-secret')
+        with self.settings(FREETEXT_KEYWORDS_READONLY=True):
+            response = self.client.post(url, data={'resource-keywords': 'wonderful-keyword'})
+            self.assertEqual(response.status_code, 401)
+            self.assertEqual(response.content, b'Unauthorized: Cannot edit/create Free-text Keywords')
+
+    def test_that_keyword_multiselect_is_enabled_for_non_admin_users_when_freetext_keywords_readonly_istrue(self):
+        """
+        Test that keyword multiselect widget is not disabled when the user is not an admin
+        and FREETEXT_KEYWORDS_READONLY=False
+        """
+        self.test_layer = Layer.objects.create(owner=self.not_admin, title='test', is_approved=True)
+        url = reverse('layer_metadata', args=(self.test_layer.alternate,))
+
+        self.client.login(username=self.not_admin.username, password='very-secret')
+        with self.settings(FREETEXT_KEYWORDS_READONLY=False):
+            response = self.client.get(url)
+            self.assertFalse(response.context['form']['keywords'].field.disabled)
+
+    def test_that_anonymous_user_can_view_map_available_to_anyone(self):
+        """
+        Test that anonymous user can view map that has view permissions to 'anyone'
+        """
+        response = self.client.get(reverse('layer_detail', args=(self.layer.alternate,)))
+        self.assertEqual(response.context['map_layers'], [self.map_layer])
+
+    def test_that_anonymous_user_cannot_view_map_with_restricted_view(self):
+        """
+        Test that anonymous user cannot view map that are not viewable by 'anyone'
+        """
+        remove_object_permissions(self.map.get_self_resource())
+        response = self.client.get(reverse('layer_detail', args=(self.layer.alternate,)))
+        self.assertEqual(response.context['map_layers'], [])
+
+    def test_that_only_users_with_permissions_can_view_maps_in_layer_view(self):
+        """
+        Test only users with view permissions to a map can view them in layer detail view
+        """
+        remove_object_permissions(self.map.get_self_resource())
+        self.client.login(username='admin', password='admin')
+        response = self.client.get(reverse('layer_detail', args=(self.layer.alternate,)))
+        self.assertEqual(response.context['map_layers'], [self.map_layer])

@@ -22,6 +22,7 @@ from django import template
 
 from pinax.ratings.models import Rating
 from django.db.models import Q
+from django.utils.translation import ugettext
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth import get_user_model
 from django.db.models import Count
@@ -29,6 +30,7 @@ from django.conf import settings
 
 from guardian.shortcuts import get_objects_for_user
 
+from geonode.base.models import ResourceBase
 from geonode.layers.models import Layer
 from geonode.maps.models import Map
 from geonode.documents.models import Document
@@ -48,6 +50,14 @@ FACETS = {
     'remote': 'Remote Layer',
     'wms': 'WMS Cascade Layer'
 }
+
+
+@register.filter(name='template_trans')
+def template_trans(text):
+    try:
+        return ugettext(text)
+    except Exception:
+        return text
 
 
 @register.simple_tag
@@ -338,6 +348,18 @@ def render_nav_menu(placeholder_name):
         pass
 
     return {'menus': OrderedDict(menus.items())}
+
+
+@register.inclusion_tag(filename='base/iso_categories.html')
+def get_visibile_resources(user):
+    categories = get_objects_for_user(user, 'view_resourcebase', klass=ResourceBase, any_perm=False)\
+        .filter(category__isnull=False).values('category__gn_description',
+                                               'category__fa_class', 'category__description', 'category__identifier')\
+        .annotate(count=Count('category'))
+
+    return {
+        'iso_formats': categories
+    }
 
 
 @register.simple_tag

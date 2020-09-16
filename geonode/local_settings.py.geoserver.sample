@@ -138,7 +138,7 @@ OGC_SERVER = {
         'LOG_FILE': '%s/geoserver/data/logs/geoserver.log' % os.path.abspath(os.path.join(PROJECT_ROOT, os.pardir)),
         # Set to dictionary identifier of database containing spatial data in DATABASES dictionary to enable
         'DATASTORE': 'datastore',
-        'TIMEOUT': int(os.getenv('OGC_REQUEST_TIMEOUT', '30')),
+        'TIMEOUT': int(os.getenv('OGC_REQUEST_TIMEOUT', '60')),
         'MAX_RETRIES': int(os.getenv('OGC_REQUEST_MAX_RETRIES', '5')),
         'BACKOFF_FACTOR': float(os.getenv('OGC_REQUEST_BACKOFF_FACTOR', '0.3')),
         'POOL_MAXSIZE': int(os.getenv('OGC_REQUEST_POOL_MAXSIZE', '10')),
@@ -279,7 +279,7 @@ PYCSW = {
 # Note: If set to EPSG:4326, then only EPSG:4326 basemaps will work.
 DEFAULT_MAP_CRS = os.environ.get('DEFAULT_MAP_CRS', "EPSG:3857")
 
-DEFAULT_LAYER_FORMAT = os.environ.get('DEFAULT_LAYER_FORMAT', "image/png8")
+DEFAULT_LAYER_FORMAT = os.environ.get('DEFAULT_LAYER_FORMAT', "image/png")
 
 # Where should newly created maps be focused?
 DEFAULT_MAP_CENTER = (os.environ.get('DEFAULT_MAP_CENTER_X', 0), os.environ.get('DEFAULT_MAP_CENTER_Y', 0))

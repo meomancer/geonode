@@ -39,6 +39,7 @@ from django.db.models import F
 from django.forms.utils import ErrorList
 
 from geonode.base.utils import ManageResourceOwnerPermissions
+from geonode.decorators import check_keyword_write_perms
 from geonode.utils import resolve_object
 from geonode.security.views import _perms_info_json
 from geonode.people.forms import ProfileForm
@@ -236,7 +237,7 @@ class DocumentUploadView(CreateView):
             self.object.is_approved = False
         if settings.RESOURCE_PUBLISHING:
             self.object.is_published = False
-        self.object.save()
+        self.object.save(notify=True)
         form.save_many2many()
         self.object.set_permissions(form.cleaned_data['permissions'])
 
@@ -345,6 +346,7 @@ class DocumentUpdateView(UpdateView):
 
 
 @login_required
+@check_keyword_write_perms
 def document_metadata(
         request,
         docid,
@@ -383,6 +385,7 @@ def document_metadata(
         poc = document.poc
         metadata_author = document.metadata_author
         topic_category = document.category
+        current_keywords = [keyword.name for keyword in document.keywords.all()]
 
         if request.method == "POST":
             document_form = DocumentForm(
@@ -395,6 +398,7 @@ def document_metadata(
             tkeywords_form = TKeywordForm(request.POST)
         else:
             document_form = DocumentForm(instance=document, prefix="resource")
+            document_form.disable_keywords_widget_for_non_superuser(request.user)
             category_form = CategoryForm(
                 prefix="category_choice_field",
                 initial=topic_category.id if topic_category else None)
@@ -428,7 +432,7 @@ def document_metadata(
         ) and category_form.is_valid():
             new_poc = document_form.cleaned_data['poc']
             new_author = document_form.cleaned_data['metadata_author']
-            new_keywords = document_form.cleaned_data['keywords']
+            new_keywords = current_keywords if request.keyword_readonly else document_form.cleaned_data['keywords']
             new_regions = document_form.cleaned_data['regions']
 
             new_category = None
@@ -482,7 +486,7 @@ def document_metadata(
             document.regions.clear()
             document.regions.add(*new_regions)
             document.category = new_category
-            document.save()
+            document.save(notify=True)
             document_form.save_many2many()
 
             register_event(request, EventType.EVENT_CHANGE_METADATA, document)
