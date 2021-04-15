@@ -421,6 +421,7 @@ GEONODE_CORE_APPS = (
     'geonode.security',
     'geonode.catalogue',
     'geonode.catalogue.metadataxsl',
+    'geonode.harvesting.apps.HarvestingAppConfig',
 )
 
 # GeoNode Apps
@@ -488,6 +489,7 @@ INSTALLED_APPS = (
     'floppyforms',
     'tinymce',
     'widget_tweaks',
+    'django_celery_beat',
 
     # REST APIs
     'rest_framework',
@@ -1717,6 +1719,7 @@ if USE_GEOSERVER:
 #          'task': 'my_app.tasks.send_notification',
 #          'schedule': crontab(hour=16, day_of_week=5),
 #     },
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 CELERY_BEAT_SCHEDULE = {}
 
 if 'geonode.services' in INSTALLED_APPS:
