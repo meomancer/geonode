@@ -17,14 +17,18 @@
 #
 #########################################################################
 
+import datetime
 import logging
 import typing
+import uuid
 
+from django.contrib.gis.geos import Polygon
+from geonode.services.serviceprocessors.wms import WmsServiceHandler
+from owslib.map.wms111 import ContentMetadata
 import requests
 from lxml import etree
 
 from .. import resourcedescriptor
-from ..utils import XML_PARSER
 from . import base
 
 logger = logging.getLogger(__name__)
@@ -38,6 +42,7 @@ class OgcWmsHarvester(base.BaseHarvesterWorker):
         "service": "WMS",
         "version": "1.3.0",
     }
+    RESOURCE_TYPE = 'layers'
 
     def __init__(
             self,
@@ -51,6 +56,8 @@ class OgcWmsHarvester(base.BaseHarvesterWorker):
             "Content-Type": "application/xml"
         }
         self.layer_title_filter = layer_title_filter
+        self.wms_handler = None
+        self.check_availability()
 
     @property
     def allows_copying_resources(self) -> bool:
@@ -85,23 +92,63 @@ class OgcWmsHarvester(base.BaseHarvesterWorker):
         }
 
     def get_num_available_resources(self) -> int:
-        raise NotImplementedError
+        return len(self.list_resources())
 
     def list_resources(
             self,
             offset: typing.Optional[int] = 0
     ) -> typing.List[base.BriefRemoteResource]:
-        raise NotImplementedError
+        result = []
+
+        # Return everything if the offset is empty
+        if not offset:
+            resources = self.wms_handler.get_resources()
+            for resource in resources:
+                if self.layer_title_filter is not None:
+                    if self.layer_title_filter.lower() not in resource.name.lower():
+                        continue
+                brief_resource = base.BriefRemoteResource(
+                    unique_identifier=resource.id,
+                    title=resource.name,
+                    resource_type=self.RESOURCE_TYPE,
+                )
+                result.append(brief_resource)
+        return result
 
     def check_availability(self, timeout_seconds: typing.Optional[int] = 5) -> bool:
         try:
-            response = self.http_session.get(f"{self.remote_url}")
-            response.raise_for_status()
-        except (requests.HTTPError, requests.ConnectionError):
+            self.wms_handler = WmsServiceHandler(
+                self.remote_url)
+        except (
+                requests.HTTPError,
+                requests.ConnectionError,
+                requests.ConnectTimeout,
+                requests.exceptions.MissingSchema,
+                etree.XMLSyntaxError,
+                etree.DocumentInvalid
+        ):
             result = False
         else:
             result = True
         return result
+
+    def get_contact(self):
+        """ Return contact of wms """
+        contact = self.wms_handler.parsed_service.provider.contact
+        return resourcedescriptor.RecordDescriptionContact(
+            role='',
+            name=contact.name,
+            organization=contact.organization,
+            position=contact.position,
+            phone_voice=None,
+            phone_facsimile=None,
+            address_delivery_point='',
+            address_city=contact.city,
+            address_administrative_area=contact.region,
+            address_postal_code=contact.postcode,
+            address_country=contact.country,
+            address_email=contact.email,
+        )
 
     def get_resource(
             self,
@@ -109,30 +156,74 @@ class OgcWmsHarvester(base.BaseHarvesterWorker):
             resource_type: str,
             harvesting_session_id: typing.Optional[int] = None
     ) -> typing.Optional[resourcedescriptor.RecordDescription]:
-        params = self._base_wms_parameters
-        params.update({
-            "request": "GetCapabilities",
-        })
-        get_capabilities_response = self.http_session.get(
-            self.remote_url, params=params)
-        get_capabilities_response.raise_for_status()
-        root = etree.fromstring(get_capabilities_response.content, parser=XML_PARSER)
-        nsmap = _get_nsmap(root.nsmap)
-        useful_layers_elements = []
-        leaf_layers = root.xpath("//wms:Layer[not(.//wms:Layer)]", namespaces=nsmap)
-        for layer_element in leaf_layers:
-            try:
-                title = layer_element.xpath("wms:Title/text()", namespaces=nsmap)[0]
-            except IndexError:
-                name = layer_element.xpath("wms:Name/text()", namespaces=nsmap)[0]
-                title = name
-            if self.layer_title_filter is not None:
-                if self.layer_title_filter.lower() not in title.lower():
-                    continue
-            logger.debug(f"Creating resource descriptor for layer {title!r}...")
-        self.update_harvesting_session(
-            harvesting_session_id, total_records_found=len(useful_layers_elements))
-        self.finish_harvesting_session(harvesting_session_id)
+        resource = self.wms_handler.get_resource(resource_unique_identifier)
+        contact = self.get_contact()
+        return resourcedescriptor.RecordDescription(
+            uuid=uuid.uuid4(),
+            language='',
+            character_set='',
+            hierarchy_level='',
+            point_of_contact=contact,
+            author=contact,
+            date_stamp=datetime.datetime.now().replace(tzinfo=datetime.timezone.utc),
+            reference_system="EPSG:4326",
+            identification=self.get_identification_resource(resource),
+            distribution=self.get_distribution_resource(resource),
+            data_quality=''
+        )
+
+    def get_contact_resource(self, resource: ContentMetadata):
+        """ Return contact from resource """
+        return resourcedescriptor.RecordDescriptionContact(
+            role='',
+            name=None,
+            organization=None,
+            position=None,
+            phone_voice=None,
+            phone_facsimile=None,
+            address_delivery_point=None,
+            address_city=None,
+            address_administrative_area=None,
+            address_postal_code=None,
+            address_country=None,
+            address_email=None,
+        )
+
+    def get_identification_resource(self, resource: ContentMetadata):
+        """ Return identification from resource """
+        contact = self.get_contact_resource(resource)
+        return resourcedescriptor.RecordIdentification(
+            name=resource.name,
+            title=resource.title,
+            date=datetime.datetime.now().replace(tzinfo=datetime.timezone.utc),
+            date_type='',
+            abstract=resource.abstract,
+            purpose=None,
+            status=None,
+            originator=contact,
+            graphic_overview_uri='',
+            native_format='',
+            place_keywords=[],
+            other_keywords=resource.keywords,
+            license=[],
+            other_constraints=None,
+            topic_category=None,
+            spatial_extent=Polygon.from_bbox(resource.boundingBoxWGS84),
+            temporal_extent=None,
+            supplemental_information=None
+        )
+
+    def get_distribution_resource(self, resource: ContentMetadata):
+        """ Return distribution from resource """
+        return resourcedescriptor.RecordDistribution(
+            link_url=None,
+            wms_url=None,
+            wfs_url=None,
+            wcs_url=None,
+            thumbnail_url='',
+            legend_url=resource.styles[list(resource.styles.keys())[0]]['legend'],
+            geojson_url=None,
+            original_format_url=None)
 
     def update_geonode_resource(
             self,
@@ -140,43 +231,3 @@ class OgcWmsHarvester(base.BaseHarvesterWorker):
             harvesting_session_id: typing.Optional[int] = None
     ):
         raise NotImplementedError
-
-    def _get_useful_layers(self) -> typing.List[etree.Element]:
-        get_capabilities_response = self.http_session.get(
-            self.remote_url,
-            params={
-                "service": "WMS",
-                "version": "1.3.0",
-                "request": "GetCapabilities",
-            }
-        )
-        get_capabilities_response.raise_for_status()
-        root = etree.fromstring(get_capabilities_response.content, parser=XML_PARSER)
-        nsmap = _get_nsmap(root.nsmap)
-        num_layers = 0
-        useful_layers_elements = []
-        leaf_layers = root.xpath("//wms:Layer[not(.//wms:Layer)]", namespaces=nsmap)
-        for layer_element in leaf_layers:
-            title = layer_element.xpath("wms:Title/text()", namespaces=nsmap)[0]
-            if self.layer_title_filter is not None:
-                if self.layer_title_filter.lower() not in title.lower():
-                    continue
-            useful_layers_elements.append(layer_element)
-        return useful_layers_elements
-
-
-def _get_nsmap(original: typing.Dict):
-    """Prepare namespaces dict for running xpath queries.
-
-    lxml complains when a namespaces dict has an entry with None as a key.
-
-    """
-
-    result = original.copy()
-    try:
-        result["wms"] = original[None]
-    except KeyError:
-        pass
-    else:
-        del result[None]
-    return result
