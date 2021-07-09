@@ -173,10 +173,6 @@ class BaseHarvesterWorker(abc.ABC):
                     f"the remote resource {harvested_info.resource_descriptor.uuid!r}")
             geonode_resource = resource_manager.update(
                 str(harvested_info.resource_descriptor.uuid), vals=defaults)
-        resource_manager.set_permissions(
-            str(harvested_info.resource_descriptor.uuid),
-            instance=geonode_resource,
-            permissions=harvester.default_access_permissions)
         harvestable_resource.geonode_resource = geonode_resource
         harvestable_resource.save()
         self.finalize_resource_update(
